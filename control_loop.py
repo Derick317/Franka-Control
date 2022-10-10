@@ -11,8 +11,8 @@ def main():
     input("WARNING: This example will move the robot!\n"
           + "Please make sure to have the user stop button at hand!\n"
           + "Press Enter to continue...")
-    agent.start_moving()
-    print("start moving ... ")
+    agent.start_cartesian_vel_control()
+    print("start moving ...\nIf you plot an figure, close the figure first then press Ctrl+C to stop the robot")
     counter = 0
     while True:
         state = agent.get_state()
@@ -21,7 +21,7 @@ def main():
         # time.sleep(0.01)
         plt.pause(0.01) # if you want to show the image, choose plt.pause instead of time.sleep
         counter += 1
-        if counter % 200 == 0:
+        if counter % 2000 == 0:
             print(f"At {counter} step,\nstate: {state},\naction: {action}")
         plot.update(state[12], state[13])
 

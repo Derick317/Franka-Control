@@ -1,75 +1,178 @@
 #include <franka/exception.h>
 #include <franka/robot.h>
 #include <franka/gripper.h>
-#include <atomic>
 #include <iostream>
 #include "examples_common.h"
+#include "callback_function.h"
 using namespace std;
-std::array<double, 6> ACTION = {0, 0, 0, 0, 0, 0};
-std::array<double, 6> last_action = {0};
-std::array<double, 6> target_action = {0};
-constexpr double Epsilon = 1E-4;
-constexpr double Duration = 4E-2;
-double oteec[16] = {0};
-double time_ = 0;
 
-franka::CartesianVelocities velocity_callback(const franka::RobotState &robot_state, franka::Duration period)
+bool OnMoving = false; // Whether a control or motion generator loop is active
+
+struct cartesian_vel_control_data{
+   franka::Robot *robot;
+   std::function<franka::CartesianVelocities(const franka::RobotState &, franka::Duration)> callback;
+};
+
+struct cartesian_pos_control_data{
+   franka::Robot *robot;
+   std::function<franka::CartesianPose(const franka::RobotState &, franka::Duration)> callback;
+};
+
+struct joint_vel_control_data{
+   franka::Robot *robot;
+   std::function<franka::JointVelocities(const franka::RobotState &, franka::Duration)> callback;
+};
+
+struct joint_pos_control_data{
+   franka::Robot *robot;
+   std::function<franka::JointPositions(const franka::RobotState &, franka::Duration)> callback;
+};
+
+void *run_cartesian_vel(void *args)
 {
-    // std::cout << "callback" << std::endl;
-    time_ += period.toSec();
-    for (int i = 0; i < 16; i++)
-    {
-        oteec[i] = robot_state.O_T_EE_c[i];
-    }
-    if (time_ > Duration)
-    {
-        time_ = 0;
-        for (int i = 0; i < 6; i++){
-            last_action[i] = target_action[i];
-            target_action[i] = ACTION[i];
-        }
-    }
-    double v_x = last_action[0] + (target_action[0] - last_action[0]) * time_ / Duration;
-    double v_y = last_action[1] + (target_action[1] - last_action[1]) * time_ / Duration;
-    double v_z = last_action[2] + (target_action[2] - last_action[2]) * time_ / Duration;
-
-    franka::CartesianVelocities output = {{v_x, v_y, v_z, 0.0, 0.0, 0.0}};
-    return output;
+    cartesian_vel_control_data *data = (cartesian_vel_control_data *)args;
+    franka::Robot *robot = data->robot;
+    OnMoving = true;
+    robot->control(data->callback);
+    OnMoving = false;
+    delete data;
 }
 
-void *robot_run(void *args)
+void *run_cartesian_pos(void *args)
 {
-    franka::Robot *robot = (franka::Robot *)(args);
-    robot->control(velocity_callback);
+    cartesian_pos_control_data *data = (cartesian_pos_control_data *)args;
+    franka::Robot *robot = data->robot;
+    OnMoving = true;
+    robot->control(data->callback);
+    OnMoving = false;
+    cout << "Just after running" << endl;
+}
+
+void *run_joint_vel(void *args)
+{
+    joint_vel_control_data *data = (joint_vel_control_data *)args;
+    franka::Robot *robot = data->robot;
+    OnMoving = true;
+    robot->control(data->callback);
+    OnMoving = false;
+    delete data;
+}
+
+
+void *run_joint_pos(void *args)
+{
+    joint_pos_control_data *data = (joint_pos_control_data *)args;
+    franka::Robot *robot = data->robot;
+    OnMoving = true;
+    robot->control(data->callback);
+    OnMoving = false;
+    delete data;
 }
 
 extern "C"
 {
-    franka::Robot *Robot_new(char fci_ip[])
-    {
-        franka::Robot *robot = new franka::Robot(fci_ip);
-        setDefaultBehavior(*robot);
-        return robot;
-    }
+    franka::Robot *Robot_new(char fci_ip[]);
+    
+    void start_cartesian_pos_control(franka::Robot *robot);
 
-    void start_moving(franka::Robot *robot)
-    {
-        pthread_t tids[1];
-        pthread_create(&tids[0], NULL, robot_run, robot);
-    }
+    void start_cartesian_vel_control(franka::Robot *robot);
 
-    void get_O_T_EE_c(double* state)
-    {
-        for (int i = 0; i < 16; i++)
-            state[i] = oteec[i];
-        return;
-    }
+    void start_joint_pos_control(franka::Robot *robot);
 
-    void set_action(double *action)
+    void start_joint_vel_control(franka::Robot *robot);
+
+    void reset(franka::Robot *robot);
+
+    void set_hand_target_xyz(double* xyz);
+
+    void update_state(franka::Robot *robot);
+    
+    void get_O_T_EE_c(double* state);
+
+    void set_action(double *action);
+
+    bool get_OnMoving();
+}
+
+franka::Robot *Robot_new(char fci_ip[])
+{
+    franka::Robot *robot = new franka::Robot(fci_ip);
+    CurrentState = robot->readOnce();
+    
+    return robot;
+}
+
+void start_cartesian_vel_control(franka::Robot *robot)
+{
+    setDefaultBehavior(*robot);
+    pthread_t tids[1];
+    cartesian_vel_control_data *args = new cartesian_vel_control_data;
+    args->callback = velocity_callback;
+    args->robot = robot;
+    pthread_create(&tids[0], NULL, run_cartesian_vel, args);
+}
+
+void start_cartesian_pos_control(franka::Robot *robot)
+{
+    setDefaultBehavior(*robot);
+    pthread_t tids[1];
+    cartesian_pos_control_data *args = new cartesian_pos_control_data;
+    args->callback = test_cartesian_pos;
+    args->robot = robot;
+    pthread_create(&tids[0], NULL, run_cartesian_pos, args);
+    cout << "Out thread" << endl;
+}
+
+void start_joint_pos_control(franka::Robot *robot)
+{
+    setDefaultBehavior(*robot);
+    pthread_t tids[1];
+    joint_pos_control_data *args = new joint_pos_control_data;
+    args->callback = joint_pos_callback;
+    args->robot = robot;
+    pthread_create(&tids[0], NULL, run_joint_pos, args);
+}
+
+void start_joint_vel_control(franka::Robot *robot)
+{
+    setDefaultBehavior(*robot);
+    pthread_t tids[1];
+    joint_vel_control_data *args = new joint_vel_control_data;
+    args->callback = joint_vel_callback;
+    args->robot = robot;
+    pthread_create(&tids[0], NULL, run_joint_vel, args);
+}
+
+void reset(franka::Robot *robot)
+{
+    std::array<double, 7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
+    MotionGenerator motion_generator(0.5, q_goal);
+    OnMoving = true;
+    robot->control(motion_generator);
+    OnMoving = false;
+}
+
+void update_state(franka::Robot *robot)
+{
+    CurrentState = robot->readOnce();
+}
+
+void get_O_T_EE_c(double* state)
+{
+    for (int i = 0; i < 16; i++)
+        state[i] = CurrentState.O_T_EE_c[i];
+    return;
+}
+
+void set_action(double *action)
+{
+    for (int i = 0; i < 6; i++)
     {
-        for (int i = 0; i < 6; i++)
-        {
-            ACTION[i] = action[i];
-        }
+        ACTION[i] = action[i];
     }
+}
+
+bool get_OnMoving()
+{
+    return OnMoving;
 }
