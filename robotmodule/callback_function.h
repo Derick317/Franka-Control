@@ -2,36 +2,52 @@
 #define CALLBACK_FUN_H_
 #include <franka/robot.h>
 #include <array>
+#include <exception>
 #include <cmath>
 #include "utils.h"
 
-
-double oteec[16] = {0};
-franka::RobotState CurrentState;
+franka::RobotState CurrentRobotState;
+franka::GripperState CurrentGripperState;
+// pthread_t tids[2]; // Robot uses tids[0], gripper uses tids[1]
 double time_ = 0;
+long STOP = 0; // a singal to stop the robot motion
 
-std::array<double, 6> ACTION = {0, 0, 0, 0, 0, 0};
-std::array<double, 6> last_action = {0};
-std::array<double, 6> target_action = {0};
-franka::CartesianVelocities velocity_callback(const franka::RobotState &robot_state, franka::Duration period)
+std::array<double, 6> CartesianVeloticy = {0, 0, 0, 0, 0, 0};
+std::array<double, 6> last_cartesian_vel = {0};
+std::array<double, 6> target_cartesian_vel = {0};
+franka::CartesianVelocities cartesian_vel_callback(const franka::RobotState &robot_state, franka::Duration period)
 {
     constexpr double Epsilon = 1E-4;
     constexpr double Duration = 4e-2;  // For velocity_callback, D=4e-2
     time_ += period.toSec();
-    CurrentState = robot_state;
+    CurrentRobotState = robot_state;
     if (time_ > Duration)
     {
         time_ = 0;
+        if (STOP) 
+        {   
+            if (STOP <= 1)
+                throw "Bad STOP value!s";
+            STOP--;
+            for(int i = 0; i < 6; i++)
+                CartesianVeloticy[i] = 0;
+        }
         for (int i = 0; i < 6; i++){
-            last_action[i] = target_action[i];
-            target_action[i] = ACTION[i];
+            last_cartesian_vel[i] = target_cartesian_vel[i];
+            target_cartesian_vel[i] = CartesianVeloticy[i];
         }
     }
-    double v_x = last_action[0] + (target_action[0] - last_action[0]) * time_ / Duration;
-    double v_y = last_action[1] + (target_action[1] - last_action[1]) * time_ / Duration;
-    double v_z = last_action[2] + (target_action[2] - last_action[2]) * time_ / Duration;
-
-    franka::CartesianVelocities output = {{v_x, v_y, v_z, 0.0, 0.0, 0.0}};
+    std::array<double, 6> car_vel_c = {0, 0, 0, 0, 0, 0};
+    for(int i = 0; i < 6; i++)
+    {
+        car_vel_c[i] = point_of_division(last_cartesian_vel[i], target_cartesian_vel[i], time_ / Duration);
+    }
+    franka::CartesianVelocities output(car_vel_c);
+    if (1 == STOP)
+    {
+        STOP--; // STOP equals 0
+        return franka::MotionFinished(output);
+    }
     return output;
 }
 
@@ -48,7 +64,7 @@ franka::CartesianPose test_cartesian_pos(const franka::RobotState& robot_state, 
         initial_position = robot_state.O_T_EE_c;
         std::cout << "Got initial state." << std::endl;
     }
-    CurrentState = robot_state;
+    CurrentRobotState = robot_state;
     std::array<double, 16> output = initial_position;
     output[14] += Amplitude * std::sin(2 * M_PI * time_ / Duration);
     if (time_ > Duration)
@@ -68,8 +84,7 @@ franka::CartesianPose goto_position(const franka::RobotState& robot_state, frank
         initial_position = robot_state.O_T_EE_c;
         std::cout << "Got initial state. Target xyz:" << target_xyz[0] << target_xyz[1] << std::endl;
     }
-    CurrentState = robot_state;
-    std::cout << "set oteec. ";
+    CurrentRobotState = robot_state;
     if (time_ < Duration)
     {
         std::array<double, 16> output;
@@ -109,7 +124,7 @@ franka::JointPositions joint_pos_callback(const franka::RobotState& robot_state,
         initial_joint_pos = robot_state.q_d;
         std::cout << "Got initial state." << std::endl;
     }
-    CurrentState = robot_state;
+    CurrentRobotState = robot_state;
     franka::JointPositions output = {{initial_joint_pos[0] + Amplitude * std::sin(2 * M_PI * time_ / Duration), initial_joint_pos[1],
                                         initial_joint_pos[2], initial_joint_pos[3],
                                         initial_joint_pos[4], initial_joint_pos[5],
@@ -121,17 +136,47 @@ franka::JointPositions joint_pos_callback(const franka::RobotState& robot_state,
     return output;
 }
 
-std::array<double, 7> JointVelocity;
+std::array<double, 7> JointVelocity = {0.0};
+std::array<double, 7> last_joint_vel = {0.0};
+std::array<double, 7> target_joint_vel = {0.0};
 franka::JointVelocities joint_vel_callback(const franka::RobotState& robot_state, franka::Duration period)
 {
-    constexpr double Amplitude = 0.05;
-    constexpr double Duration = 8;
+    constexpr double Duration = 1e-1;  // For velocity_callback, D=4e-2
     time_ += period.toSec();
-    CurrentState = robot_state;
-    double omega = Amplitude * std::sin(2 * M_PI * time_ / Duration);
-    franka::JointVelocities output = {{0.0, 0.0, 0.0, omega, omega, omega, omega}};
+    CurrentRobotState = robot_state;
     if (time_ > Duration)
+    {
+        time_ = 0;
+        if (STOP) 
+        {   
+            // std::cout << "STOP = " << STOP << ", velocity:";
+            // for (int j = 0; j < 7; j++)
+            //     std::cout << ' ' << robot_state.dq[j];
+            // std::cout << std::endl;
+            if (STOP <= 1)
+                throw "Bad STOP value!s";
+            STOP--;
+            for(int i = 0; i < 7; i++)
+                JointVelocity[i] = 0;
+        }
+        for (int i = 0; i < 7; i++){
+            last_joint_vel[i] = target_joint_vel[i];
+            target_joint_vel[i] = JointVelocity[i];
+        }
+    }
+    franka::JointVelocities output = {{last_joint_vel[0] + (target_joint_vel[0] - last_joint_vel[0]) * time_ / Duration,
+                                        last_joint_vel[1] + (target_joint_vel[1] - last_joint_vel[1]) * time_ / Duration,
+                                        last_joint_vel[2] + (target_joint_vel[2] - last_joint_vel[2]) * time_ / Duration,
+                                        last_joint_vel[3] + (target_joint_vel[3] - last_joint_vel[3]) * time_ / Duration,
+                                        last_joint_vel[4] + (target_joint_vel[4] - last_joint_vel[4]) * time_ / Duration,
+                                        last_joint_vel[5] + (target_joint_vel[5] - last_joint_vel[5]) * time_ / Duration,
+                                        last_joint_vel[6] + (target_joint_vel[6] - last_joint_vel[6]) * time_ / Duration}};
+    
+    if (1 == STOP)
+    {
+        STOP--; // STOP equals 0
         return franka::MotionFinished(output);
+    }
     
     return output;
 }

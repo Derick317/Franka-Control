@@ -6,7 +6,10 @@
 #include "callback_function.h"
 using namespace std;
 
-bool OnMoving = false; // Whether a control or motion generator loop is active
+bool RonMoving = false; // Whether a control or motion generator loop of robot is active
+bool GonMoving = false; // Whether a control or motion generator loop of gripper is active
+double GripperTarget = 0;
+double GripperSpeed = 0.1;
 
 struct cartesian_vel_control_data{
    franka::Robot *robot;
@@ -32,47 +35,70 @@ void *run_cartesian_vel(void *args)
 {
     cartesian_vel_control_data *data = (cartesian_vel_control_data *)args;
     franka::Robot *robot = data->robot;
-    OnMoving = true;
+    RonMoving = true;
+    std::cout << "Just before Cartesian velocity control" << std::endl;
     robot->control(data->callback);
-    OnMoving = false;
-    delete data;
+    RonMoving = false;
+    std::cout << "Just after Cartesian velocity control" << std::endl;
+    return((void *)0);
 }
 
 void *run_cartesian_pos(void *args)
 {
     cartesian_pos_control_data *data = (cartesian_pos_control_data *)args;
     franka::Robot *robot = data->robot;
-    OnMoving = true;
+    RonMoving = true;
+    std::cout << "Just befoe Cartesian position control" << std::endl;
     robot->control(data->callback);
-    OnMoving = false;
+    RonMoving = false;
     cout << "Just after running" << endl;
+    return((void *)0);
 }
 
 void *run_joint_vel(void *args)
 {
     joint_vel_control_data *data = (joint_vel_control_data *)args;
     franka::Robot *robot = data->robot;
-    OnMoving = true;
+    RonMoving = true;
+    std::cout << "Just befoe joint velocity control" << std::endl;
     robot->control(data->callback);
-    OnMoving = false;
-    delete data;
+    std::cout << "Just after joint velocity control" << std::endl;
+    RonMoving = false;
+    return((void *)0);
 }
-
 
 void *run_joint_pos(void *args)
 {
     joint_pos_control_data *data = (joint_pos_control_data *)args;
     franka::Robot *robot = data->robot;
-    OnMoving = true;
+    RonMoving = true;
+    std::cout << "Just befoe joint position control" << std::endl;
     robot->control(data->callback);
-    OnMoving = false;
-    delete data;
+    std::cout << "Just after joint position control" << std::endl;
+    RonMoving = false;
+    return((void *)0);
+}
+
+void *move_gripper(void *args)
+{
+    franka::Gripper *gripper = (franka::Gripper *)args;
+    GonMoving = true;
+    while(true)
+    {
+        gripper->move(GripperTarget, GripperSpeed);
+        CurrentGripperState = gripper->readOnce();
+    }
+    GonMoving = false;
 }
 
 extern "C"
 {
-    franka::Robot *Robot_new(char fci_ip[]);
+    void new_robot(char fci_ip[], void **address);
     
+    void new_gripper(char fci_ip[], void **address);
+
+    void stop_robot(long);
+
     void start_cartesian_pos_control(franka::Robot *robot);
 
     void start_cartesian_vel_control(franka::Robot *robot);
@@ -81,25 +107,64 @@ extern "C"
 
     void start_joint_vel_control(franka::Robot *robot);
 
+    void start_gripper(franka::Gripper *gripper);
+
     void reset(franka::Robot *robot);
 
-    void set_hand_target_xyz(double* xyz);
+    void homing(franka::Gripper *gripper);
 
-    void update_state(franka::Robot *robot);
+    void set_gripper_motion(double width, double speed);
+
+    void update_state(franka::Robot *robot, franka::Gripper *gripper);
     
-    void get_O_T_EE_c(double* state);
+    void set_cartesian_vel(double *);
 
-    void set_action(double *action);
+    void set_joint_vel(double *vel);
 
-    bool get_OnMoving();
+    double get_gwidth();
+
+    void get_O_T_EE(double *state);
+
+    void get_O_dP_EE_d(double *state);
+
+    void get_q(double *state);
+
+    void get_dq(double *state);
+
+    bool get_RonMoving();
+
+    bool get_GonMoving();
 }
 
-franka::Robot *Robot_new(char fci_ip[])
+void new_robot(char fci_ip[], void **address)
 {
     franka::Robot *robot = new franka::Robot(fci_ip);
-    CurrentState = robot->readOnce();
-    
-    return robot;
+    STOP = 0;
+    CurrentRobotState = robot->readOnce();
+    cout << "Robot address: "<< robot << endl;
+    *address = robot;
+}
+
+void new_gripper(char fci_ip[], void **address)
+{
+    franka::Gripper *gripper = new franka::Gripper(fci_ip);
+    CurrentGripperState = gripper->readOnce();
+    *address = gripper;
+}
+
+void stop_robot(long step)
+{
+    // cout << "tids[0] = " << tids[0] << endl;
+    if (RonMoving)
+    {   
+        cout << "Just before assign STOP! STOP = " << STOP << endl;
+        STOP = step;
+        cout << "Just after assign STOP! (printed in C++)" << endl;
+    }
+    else if (STOP)
+    {   
+        throw std::runtime_error("Now the robot is not moving, but stop is not 0.");
+    }
 }
 
 void start_cartesian_vel_control(franka::Robot *robot)
@@ -107,9 +172,11 @@ void start_cartesian_vel_control(franka::Robot *robot)
     setDefaultBehavior(*robot);
     pthread_t tids[1];
     cartesian_vel_control_data *args = new cartesian_vel_control_data;
-    args->callback = velocity_callback;
+    args->callback = cartesian_vel_callback;
     args->robot = robot;
+    cout << "Just Before create a cartesian vel control thread" << endl;
     pthread_create(&tids[0], NULL, run_cartesian_vel, args);
+    cout << "Just after create a cartesian vel control thread at " << tids[0] << endl;
 }
 
 void start_cartesian_pos_control(franka::Robot *robot)
@@ -143,36 +210,104 @@ void start_joint_vel_control(franka::Robot *robot)
     pthread_create(&tids[0], NULL, run_joint_vel, args);
 }
 
+void start_gripper(franka::Gripper *gripper)
+{
+    pthread_t tids[1];
+    GripperTarget = CurrentGripperState.width;
+    pthread_create(&tids[0], NULL, move_gripper, gripper);
+}
+
+void set_gripper_motion(double width, double speed = -1.0)
+{
+    if(width >= CurrentGripperState.max_width)
+    {
+        cout << "Warnning: the target width " << width << " is too large for the current fingers on the gripper!\n"
+             << "The maximum width is " << CurrentGripperState.max_width
+             << endl;
+        GripperTarget = CurrentGripperState.max_width;
+    }
+    else
+        GripperTarget = width;
+
+    if(speed > 0)
+        GripperSpeed = speed;
+}
+
 void reset(franka::Robot *robot)
 {
+    cout << "robot address in reset(): " << robot << endl;
     std::array<double, 7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
     MotionGenerator motion_generator(0.5, q_goal);
-    OnMoving = true;
+    RonMoving = true;
     robot->control(motion_generator);
-    OnMoving = false;
+    cout << "Reset the robot" << endl;
+    RonMoving = false;
 }
 
-void update_state(franka::Robot *robot)
+void update_state(franka::Robot *robot, franka::Gripper *gripper)
 {
-    CurrentState = robot->readOnce();
+    cout << "Just before updating the state, robot address = " << robot << endl;
+    CurrentRobotState = robot->readOnce();
+    CurrentGripperState = gripper->readOnce();
+    cout << "Just before updating the state" << endl;
 }
 
-void get_O_T_EE_c(double* state)
+void homing(franka::Gripper *gripper)
+{
+    gripper->homing();
+}
+
+double get_gwidth()
+{
+    return CurrentGripperState.width;
+}
+
+void get_O_T_EE(double* state)
 {
     for (int i = 0; i < 16; i++)
-        state[i] = CurrentState.O_T_EE_c[i];
-    return;
+        state[i] = CurrentRobotState.O_T_EE[i];
 }
 
-void set_action(double *action)
+void get_O_dP_EE_d(double* state)
+{
+    for (int i = 0; i < 6; i++)
+        state[i] = CurrentRobotState.O_dP_EE_d[i];
+}
+
+void get_q(double* state)
+{
+    for (int i = 0; i < 7; i++)
+        state[i] = CurrentRobotState.q[i];
+}
+
+void get_dq(double* state)
+{
+    for (int i = 0; i < 7; i++)
+        state[i] = CurrentRobotState.dq[i];
+}
+
+void set_cartesian_vel(double *action)
 {
     for (int i = 0; i < 6; i++)
     {
-        ACTION[i] = action[i];
+        CartesianVeloticy[i] = action[i];
     }
 }
 
-bool get_OnMoving()
+void set_joint_vel(double *vel)
 {
-    return OnMoving;
+    for (int i = 0; i < 7; i++)
+    {
+        JointVelocity[i] = vel[i];
+    }
+}
+
+bool get_RonMoving()
+{
+    return RonMoving;
+}
+
+bool get_GonMoving()
+{
+    return GonMoving;
 }
