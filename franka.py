@@ -4,6 +4,9 @@ import time
 import sys
 sys.path.append(".")
 lib = ctypes.cdll.LoadLibrary('/home/hyperplane/ros-neotic-franka/test_pipeline/build/robotmodule/librobotmodule.so')
+lib.get_gwidth.restype = ctypes.c_double
+lib.get_RonMoving.restype = ctypes.c_bool
+lib.get_GonMoving.restype = ctypes.c_bool
 
 def convert_type(input):
     ctypes_map = {
@@ -46,6 +49,10 @@ class Robot:
     @property
     def GonMoving(self):
         return bool(lib.get_GonMoving())
+
+    @property
+    def ExceptionOccurred(self):
+        return bool(lib.get_Exception_Occur())
 
     def stop(self, step=2):
         assert step > 1
@@ -91,6 +98,11 @@ class Robot:
         return lib.get_gwidth()
 
     def get_O_T_EE(self):
+        """
+        Measured end effector pose in base frame.
+
+        Output: a numpy ndarray of shape (16,) representing a 4x4 matrix in column-major format. 
+        """
         state = (ctypes.c_double * 16)()
         lib.get_O_T_EE(state)
         return np.ctypeslib.as_array(state)
@@ -110,10 +122,41 @@ class Robot:
         lib.get_dq(dq)
         return np.ctypeslib.as_array(dq)
 
-    def hand_goto_xyz(self, xyz):
-        lib.set_hand_target_xyz(convert_type(list(xyz)))
-        print("Finishing seting target xyz")
-        lib.start_moving_pos(convert_type(self.obj))
+    def hand_goto_xyz(self, xyz, duration=1.0):
+        """
+        Move hand to a specific position, x_t = (x_d - x_0)sin²(πt/(2duation)) + x_0
+
+        Input:
+            - xyz: numpy nparray of shape (3,)
+            - duration: time duration of the movement
+        """
+        assert not self.RonMoving, "The robot is moving, so you cannot give it another command!"
+        
+        r.start_cartesian_pos_control()
+        time.sleep(0.2)
+        O_T_EE = self.get_O_T_EE()
+        print("start moving from {} to {}".format(O_T_EE[12: 15], xyz))
+        start_time = time.time()
+        have_print = False
+        while (time.time() - start_time < duration):
+            if self.ExceptionOccurred:
+                # print("PYTHON: exception occurred")
+                O_T_EE = self.get_O_T_EE()
+                have_print = False
+                time.sleep(0.0002)
+                start_time = time.time()
+                continue
+            if not have_print:
+                print("start moving from {} to {}".format(O_T_EE[12: 15], xyz))
+                have_print = True
+            t = time.time() - start_time
+            # print("PYTHON: t = ", t)
+            x_t = (xyz - O_T_EE[12: 15]) * np.sin(np.pi * t / (2 * duration)) ** 2 + O_T_EE[12: 15]
+            current_command = O_T_EE.copy()
+            current_command[12: 15] = x_t
+            self.set_cartesian_pos(current_command)
+            time.sleep(0.0002)
+        self.stop(10)
 
     def update_state(self):
         assert not (self.RonMoving or self.GonMoving), "Cannot update robot's state manually when the robot or the gripper is moving!"
@@ -121,6 +164,9 @@ class Robot:
 
     def set_cartesian_vel(self, vel):
         lib.set_cartesian_vel(convert_type(list(vel)))
+
+    def set_cartesian_pos(self, pos):
+        lib.set_cartesian_pos(convert_type(list(pos)))
 
     def set_joint_vel(self, vel):
         lib.set_joint_vel(convert_type(list(vel)))
@@ -130,17 +176,9 @@ class Robot:
 
 if __name__ == '__main__':
     r = Robot("172.16.0.2")
-    state = r.get_O_T_EE()
-    print(state)
     r.reset()
-    r.start_joint_vel_control()
-    time.sleep(10)
-    exit()
-    r.start_gripper()
-    r.set_gripper_motion(0.02, 0.1)
-    t0 = time.time()
-    while True:
-        width = 0.02 * (np.sin(time.time() - t0) + 1)
-        speed = 0.02 * np.abs(np.cos(time.time() - t0))
-        r.set_gripper_motion(width, speed)
-        time.sleep(0.01)
+    # time.sleep(1)
+    # O_T_EE = r.get_O_T_EE()
+    # O_T_EE[12] += 0.1
+    # r.hand_goto_xyz(O_T_EE[12: 15], 4.0)
+    # print("done")

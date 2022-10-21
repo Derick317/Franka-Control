@@ -1,6 +1,7 @@
 #ifndef CALLBACK_FUN_H_
 #define CALLBACK_FUN_H_
 #include <franka/robot.h>
+#include <franka/gripper.h>
 #include <array>
 #include <exception>
 #include <cmath>
@@ -8,9 +9,9 @@
 
 franka::RobotState CurrentRobotState;
 franka::GripperState CurrentGripperState;
-// pthread_t tids[2]; // Robot uses tids[0], gripper uses tids[1]
 double time_ = 0;
 long STOP = 0; // a singal to stop the robot motion
+int ExceptionOccur = 0;
 
 std::array<double, 6> CartesianVeloticy = {0, 0, 0, 0, 0, 0};
 std::array<double, 6> last_cartesian_vel = {0};
@@ -32,10 +33,12 @@ franka::CartesianVelocities cartesian_vel_callback(const franka::RobotState &rob
             for(int i = 0; i < 6; i++)
                 CartesianVeloticy[i] = 0;
         }
-        for (int i = 0; i < 6; i++){
-            last_cartesian_vel[i] = target_cartesian_vel[i];
-            target_cartesian_vel[i] = CartesianVeloticy[i];
-        }
+        last_cartesian_vel = target_cartesian_vel;
+        target_cartesian_vel = CartesianVeloticy;
+        // for (int i = 0; i < 6; i++){
+        //     last_cartesian_vel[i] = target_cartesian_vel[i];
+        //     target_cartesian_vel[i] = CartesianVeloticy[i];
+        // }
     }
     std::array<double, 6> car_vel_c = {0, 0, 0, 0, 0, 0};
     for(int i = 0; i < 6; i++)
@@ -52,64 +55,80 @@ franka::CartesianVelocities cartesian_vel_callback(const franka::RobotState &rob
 }
 
 
-std::array<double, 16> initial_position;
-std::array<double, 3> target_xyz;
-franka::CartesianPose test_cartesian_pos(const franka::RobotState& robot_state, franka::Duration period)
+std::array<double, 16> CartesianPosition;
+std::array<double, 16> last_cartesian_pos = {0};
+std::array<double, 16> target_cartesian_pos = {0};
+franka::CartesianPose cartesian_pos_callback(const franka::RobotState& robot_state, franka::Duration period)
 {
-    constexpr double Amplitude = 0.002;
-    constexpr double Duration = 10;
+    constexpr double Duration = 1e-2;  // For velocity_callback, D=4e-2
     time_ += period.toSec();
-    if (0.0 == time_)
-    {
-        initial_position = robot_state.O_T_EE_c;
-        std::cout << "Got initial state." << std::endl;
-    }
     CurrentRobotState = robot_state;
-    std::array<double, 16> output = initial_position;
-    output[14] += Amplitude * std::sin(2 * M_PI * time_ / Duration);
     if (time_ > Duration)
-        return franka::MotionFinished(output);
-    
-    std::cout << "Move for one step at " << time_ << std::endl;
-    return output;
-}
-
-
-franka::CartesianPose goto_position(const franka::RobotState& robot_state, franka::Duration period)
-{
-    constexpr double Duration = 5;
-    time_ += period.toSec();
-    if (0.0 == time_)
     {
-        initial_position = robot_state.O_T_EE_c;
-        std::cout << "Got initial state. Target xyz:" << target_xyz[0] << target_xyz[1] << std::endl;
+        time_ = 0;
+        if (STOP) 
+        {   
+            if (STOP <= 1)
+                throw "Bad STOP value!s";
+            STOP--;
+            for(int i = 0; i < 16; i++)
+                CartesianPosition[i] = target_cartesian_pos[i];
+        }
+        for (int i = 0; i < 16; i++){
+            last_cartesian_pos[i] = target_cartesian_pos[i];
+            target_cartesian_pos[i] = CartesianPosition[i];
+        }
     }
-    CurrentRobotState = robot_state;
-    if (time_ < Duration)
+    std::array<double, 16> car_pos_c;
+    for(int i = 0; i < 16; i++)
     {
-        std::array<double, 16> output;
-        output = initial_position;
-        std::array<double, 3> begin = get_xyz(initial_position), end = target_xyz;
-        double h = begin[2] - end[2];
-        double d = dist(begin[0] - end[0], begin[1] - end[1]);
-        double theta = M_PI_4 * (1 - std::cos(M_PI * time_ / Duration)); // for 0 < time < duration, 0 < theta < pi/2
-        double delta_z = h * (std::cos(theta) - 1);
-        double delta_xy = d * std::sin(theta);
-        std::array<double, 3> new_xyz = {
-            begin[0] + delta_xy * (end[0] - begin[0]) / d,
-            begin[1] + delta_xy * (end[1] - begin[1]) / d,
-            begin[2] + delta_z
-        };
-        xyz_2_OTEE(new_xyz, output);
-        std::cout << "Move for one step at " << time_ << std::endl;
-        return output;
+        car_pos_c[i] = point_of_division(last_cartesian_pos[i], target_cartesian_pos[i], time_ / Duration);
     }
-    else
+    std::cout << "time = " << time_  << ", CartesianPosition_x = " << CartesianPosition[12] << ", car_pos_c_x = " << car_pos_c[12] << std::endl;
+    if (1 == STOP)
     {
-        std::cout << "Finish moving" << std::endl;
+        STOP--; // STOP equals 0
         return franka::MotionFinished(robot_state.O_T_EE_c);
     }
+    return car_pos_c;
 }
+
+
+// franka::CartesianPose goto_position(const franka::RobotState& robot_state, franka::Duration period)
+// {
+//     constexpr double Duration = 5;
+//     time_ += period.toSec();
+//     if (0.0 == time_)
+//     {
+//         initial_position = robot_state.O_T_EE_c;
+//         std::cout << "Got initial state. Target xyz:" << target_xyz[0] << target_xyz[1] << std::endl;
+//     }
+//     CurrentRobotState = robot_state;
+//     if (time_ < Duration)
+//     {
+//         std::array<double, 16> output;
+//         output = initial_position;
+//         std::array<double, 3> begin = get_xyz(initial_position), end = target_xyz;
+//         double h = begin[2] - end[2];
+//         double d = dist(begin[0] - end[0], begin[1] - end[1]);
+//         double theta = M_PI_4 * (1 - std::cos(M_PI * time_ / Duration)); // for 0 < time < duration, 0 < theta < pi/2
+//         double delta_z = h * (std::cos(theta) - 1);
+//         double delta_xy = d * std::sin(theta);
+//         std::array<double, 3> new_xyz = {
+//             begin[0] + delta_xy * (end[0] - begin[0]) / d,
+//             begin[1] + delta_xy * (end[1] - begin[1]) / d,
+//             begin[2] + delta_z
+//         };
+//         xyz_2_OTEE(new_xyz, output);
+//         std::cout << "Move for one step at " << time_ << std::endl;
+//         return output;
+//     }
+//     else
+//     {
+//         std::cout << "Finish moving" << std::endl;
+//         return franka::MotionFinished(robot_state.O_T_EE_c);
+//     }
+// }
 
 
 std::array<double, 7> JointPosition;
@@ -141,7 +160,7 @@ std::array<double, 7> last_joint_vel = {0.0};
 std::array<double, 7> target_joint_vel = {0.0};
 franka::JointVelocities joint_vel_callback(const franka::RobotState& robot_state, franka::Duration period)
 {
-    constexpr double Duration = 1e-1;  // For velocity_callback, D=4e-2
+    constexpr double Duration = 1e-2;  // For velocity_callback, D=4e-2
     time_ += period.toSec();
     CurrentRobotState = robot_state;
     if (time_ > Duration)
@@ -149,10 +168,6 @@ franka::JointVelocities joint_vel_callback(const franka::RobotState& robot_state
         time_ = 0;
         if (STOP) 
         {   
-            // std::cout << "STOP = " << STOP << ", velocity:";
-            // for (int j = 0; j < 7; j++)
-            //     std::cout << ' ' << robot_state.dq[j];
-            // std::cout << std::endl;
             if (STOP <= 1)
                 throw "Bad STOP value!s";
             STOP--;

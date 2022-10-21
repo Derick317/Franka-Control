@@ -1,15 +1,13 @@
 #include <franka/exception.h>
 #include <franka/robot.h>
 #include <franka/gripper.h>
+#include <unistd.h>
 #include <iostream>
 #include "examples_common.h"
 #include "callback_function.h"
+#include "robotmodule.h"
 using namespace std;
 
-bool RonMoving = false; // Whether a control or motion generator loop of robot is active
-bool GonMoving = false; // Whether a control or motion generator loop of gripper is active
-double GripperTarget = 0;
-double GripperSpeed = 0.1;
 
 struct cartesian_vel_control_data{
    franka::Robot *robot;
@@ -31,40 +29,104 @@ struct joint_pos_control_data{
    std::function<franka::JointPositions(const franka::RobotState &, franka::Duration)> callback;
 };
 
+void handle_exception(franka::Robot *robot, const franka::Exception &e)
+{
+    ExceptionOccur = 1;
+    std::cout << e.what() << "\nTrying recovery..." << std::endl;
+    try
+    {
+        robot->automaticErrorRecovery();
+    }
+    catch (const franka::Exception &e)
+    {
+        std::cout << e.what() << std::endl;
+        std::cout << "Error recovery unsuccessful" << std::endl;
+    }
+    sleep(0.2);
+    reset(robot);
+    CurrentRobotState = robot->readOnce();
+    sleep(0.2);
+    ExceptionOccur = 0;
+}
+
 void *run_cartesian_vel(void *args)
 {
     cartesian_vel_control_data *data = (cartesian_vel_control_data *)args;
     franka::Robot *robot = data->robot;
-    RonMoving = true;
-    std::cout << "Just before Cartesian velocity control" << std::endl;
-    robot->control(data->callback);
+    try
+    {
+        CartesianVeloticy = {0};
+        RonMoving = true;
+        std::cout << "Just before Cartesian velocity control" << std::endl;
+        robot->control(data->callback);
+    }
+    catch(const franka::ControlException& e)
+    {
+        handle_exception(robot, e);
+    }
+    catch(const franka::NetworkException& e)
+    {
+        handle_exception(robot, e);
+    }
     RonMoving = false;
     std::cout << "Just after Cartesian velocity control" << std::endl;
-    return((void *)0);
+    return nullptr;
 }
 
 void *run_cartesian_pos(void *args)
 {
     cartesian_pos_control_data *data = (cartesian_pos_control_data *)args;
     franka::Robot *robot = data->robot;
+    CurrentRobotState = robot->readOnce();
     RonMoving = true;
-    std::cout << "Just befoe Cartesian position control" << std::endl;
-    robot->control(data->callback);
+    bool success = false;
+    while(!success)
+        try
+        {
+            CartesianPosition = last_cartesian_pos = target_cartesian_pos = CurrentRobotState.O_T_EE_c;
+            for(int i=12; i<15; i++)
+                std::cout << CartesianPosition[i] << ' ';
+            time_ = 0;
+            std::cout << "Just before Cartesian position control" << std::endl;
+            robot->control(data->callback);
+            cout << "Just after running" << endl;
+            success = true;
+        }
+        catch(const franka::ControlException& e)
+        {
+            handle_exception(robot, e);
+        }
+        catch(const franka::NetworkException& e)
+        {
+            handle_exception(robot, e);
+        }
     RonMoving = false;
-    cout << "Just after running" << endl;
-    return((void *)0);
+    
+    return NULL;
 }
 
 void *run_joint_vel(void *args)
 {
     joint_vel_control_data *data = (joint_vel_control_data *)args;
     franka::Robot *robot = data->robot;
-    RonMoving = true;
-    std::cout << "Just befoe joint velocity control" << std::endl;
-    robot->control(data->callback);
+    try
+    {
+        JointVelocity = {0};
+        RonMoving = true;
+        std::cout << "Just before joint velocity control" << std::endl;
+        robot->control(data->callback);
+    }
+    catch(const franka::ControlException& e)
+    {
+        handle_exception(robot, e);
+    }
+    catch(const franka::NetworkException& e)
+    {
+        handle_exception(robot, e);
+    }
     std::cout << "Just after joint velocity control" << std::endl;
     RonMoving = false;
-    return((void *)0);
+    return nullptr;
 }
 
 void *run_joint_pos(void *args)
@@ -72,11 +134,11 @@ void *run_joint_pos(void *args)
     joint_pos_control_data *data = (joint_pos_control_data *)args;
     franka::Robot *robot = data->robot;
     RonMoving = true;
-    std::cout << "Just befoe joint position control" << std::endl;
+    std::cout << "Just before joint position control" << std::endl;
     robot->control(data->callback);
     std::cout << "Just after joint position control" << std::endl;
     RonMoving = false;
-    return((void *)0);
+    return NULL;
 }
 
 void *move_gripper(void *args)
@@ -89,51 +151,6 @@ void *move_gripper(void *args)
         CurrentGripperState = gripper->readOnce();
     }
     GonMoving = false;
-}
-
-extern "C"
-{
-    void new_robot(char fci_ip[], void **address);
-    
-    void new_gripper(char fci_ip[], void **address);
-
-    void stop_robot(long);
-
-    void start_cartesian_pos_control(franka::Robot *robot);
-
-    void start_cartesian_vel_control(franka::Robot *robot);
-
-    void start_joint_pos_control(franka::Robot *robot);
-
-    void start_joint_vel_control(franka::Robot *robot);
-
-    void start_gripper(franka::Gripper *gripper);
-
-    void reset(franka::Robot *robot);
-
-    void homing(franka::Gripper *gripper);
-
-    void set_gripper_motion(double width, double speed);
-
-    void update_state(franka::Robot *robot, franka::Gripper *gripper);
-    
-    void set_cartesian_vel(double *);
-
-    void set_joint_vel(double *vel);
-
-    double get_gwidth();
-
-    void get_O_T_EE(double *state);
-
-    void get_O_dP_EE_d(double *state);
-
-    void get_q(double *state);
-
-    void get_dq(double *state);
-
-    bool get_RonMoving();
-
-    bool get_GonMoving();
 }
 
 void new_robot(char fci_ip[], void **address)
@@ -174,9 +191,9 @@ void start_cartesian_vel_control(franka::Robot *robot)
     cartesian_vel_control_data *args = new cartesian_vel_control_data;
     args->callback = cartesian_vel_callback;
     args->robot = robot;
-    cout << "Just Before create a cartesian vel control thread" << endl;
+    cout << "Just Before creating a cartesian vel control thread" << endl;
     pthread_create(&tids[0], NULL, run_cartesian_vel, args);
-    cout << "Just after create a cartesian vel control thread at " << tids[0] << endl;
+    cout << "Just after creating a cartesian vel control thread at " << tids[0] << endl;
 }
 
 void start_cartesian_pos_control(franka::Robot *robot)
@@ -184,7 +201,7 @@ void start_cartesian_pos_control(franka::Robot *robot)
     setDefaultBehavior(*robot);
     pthread_t tids[1];
     cartesian_pos_control_data *args = new cartesian_pos_control_data;
-    args->callback = test_cartesian_pos;
+    args->callback = cartesian_pos_callback;
     args->robot = robot;
     pthread_create(&tids[0], NULL, run_cartesian_pos, args);
     cout << "Out thread" << endl;
@@ -239,7 +256,21 @@ void reset(franka::Robot *robot)
     std::array<double, 7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
     MotionGenerator motion_generator(0.5, q_goal);
     RonMoving = true;
-    robot->control(motion_generator);
+    try
+    {
+        robot->control(motion_generator);
+        MotionGenerator motion_generator2(0.5, ResetGoal);
+        robot->control(motion_generator2);
+        CurrentRobotState = robot->readOnce();
+    }
+    catch(const franka::ControlException& e)
+    {
+        handle_exception(robot, e);
+    }
+    catch(const franka::NetworkException& e)
+    {
+        handle_exception(robot, e);
+    }
     cout << "Reset the robot" << endl;
     RonMoving = false;
 }
@@ -262,10 +293,15 @@ double get_gwidth()
     return CurrentGripperState.width;
 }
 
+int get_Exception_Occur()
+{
+    return ExceptionOccur;
+}
+
 void get_O_T_EE(double* state)
 {
     for (int i = 0; i < 16; i++)
-        state[i] = CurrentRobotState.O_T_EE[i];
+        state[i] = CurrentRobotState.O_T_EE_c[i];
 }
 
 void get_O_dP_EE_d(double* state)
@@ -291,6 +327,14 @@ void set_cartesian_vel(double *action)
     for (int i = 0; i < 6; i++)
     {
         CartesianVeloticy[i] = action[i];
+    }
+}
+
+void set_cartesian_pos(double *pos)
+{
+    for (int i = 0; i < 16; i++)
+    {
+        CartesianPosition[i] = pos[i];
     }
 }
 
