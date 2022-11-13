@@ -5,8 +5,8 @@ import numpy as np
 import time
 
 def main():
-    agent = Robot("172.16.0.2")
-    policy = Policy(np.array([0.4, 0, 0.2]), 0.04)
+    agent = Robot("172.16.0.2", np.array([0, -np.pi / 4, 0, -3 * np.pi / 4, 0, np.pi / 2, np.pi / 4]), 0.03)
+    policy = Policy(np.array([0.4, 0, 0.2]), -0.04)
     # plot = Plot([0, 1], [-0.5, 0.5])
     input("WARNING: This example will move the robot!\n"
           + "Please make sure to have the user stop button at hand!\n"
@@ -19,7 +19,7 @@ def main():
     # agent.set_gripper_motion(0.02, 0.1)
     time.sleep(0.5)
     # t0 = time.time()
-    for _ in range(100):
+    for _ in range(2000):
         state = agent.get_O_T_EE()
         action = policy(state)
         agent.set_cartesian_vel(action)
@@ -29,22 +29,35 @@ def main():
         time.sleep(0.01)
         # plt.pause(0.01) # if you want to show the image, choose plt.pause instead of time.sleep
         # plot.update(state[12], state[13])
-    agent.stop(10)
-    print("Finished once")
-    agent.update_state()
+    # agent.stop(10)
+    # print("Finished once")
+    # # agent.update_state()
     # agent.reset()
-    agent.start_cartesian_vel_control()
-    print("Another traj")
-    for _ in range(100):
-        # print(f"Step {_} in the 2nd loop")
-        state = agent.get_O_T_EE()
-        action = policy(state)
-        agent.set_cartesian_vel(action)
-        time.sleep(0.01)
-        # plt.pause(0.01) # if you want to show the image, choose plt.pause instead of time.sleep
-        # plot.update(state[12], state[13])
+    # agent.start_cartesian_vel_control()
+    # print("Another traj")
+    # for _ in range(100):
+    #     # print(f"Step {_} in the 2nd loop")
+    #     state = agent.get_O_T_EE()
+    #     action = policy(state)
+    #     agent.set_cartesian_vel(action)
+    #     # time.sleep(0.01)
+    #     plt.pause(0.01) # if you want to show the image, choose plt.pause instead of time.sleep
+    #     plot.update(state[12], state[13])
+    # agent.stop(10)
+    # print("Finished twice")
+    # # agent.update_state()
+    # agent.start_cartesian_vel_control()
+    # print("Another traj")
+    # for _ in range(100):
+    #     # print(f"Step {_} in the 2nd loop")
+    #     state = agent.get_O_T_EE()
+    #     action = policy(state)
+    #     agent.set_cartesian_vel(action)
+    #     # time.sleep(0.01)
+    #     plt.pause(0.01) # if you want to show the image, choose plt.pause instead of time.sleep
+    #     plot.update(state[12], state[13])
     agent.stop(10)
+    print("Finished!")
 
-    
 if __name__ == "__main__":
     main()

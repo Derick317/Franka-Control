@@ -13,7 +13,8 @@ class Plot:
         self.ax.set_xlim(xlim)
         self.ax.set_ylim(ylim)
         self.ax.set_title(title)
-        plt.grid(add_grid) 
+        plt.grid(add_grid)
+        plt.title("If you plot an figure, close the figure first then press Ctrl+C to stop the robot.")
         plt.ion()  #interactive mode on
         self.obsX = []
         self.obsY = []

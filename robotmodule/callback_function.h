@@ -1,11 +1,68 @@
 #ifndef CALLBACK_FUN_H_
 #define CALLBACK_FUN_H_
+#include <franka/duration.h>
+#include <franka/exception.h>
+#include <franka/model.h>
 #include <franka/robot.h>
 #include <franka/gripper.h>
-#include <array>
 #include <exception>
-#include <cmath>
+#include <Eigen/Dense>
 #include "utils.h"
+
+class Controller {
+ public:
+  Controller(size_t dq_filter_size,
+             const std::array<double, 7>& K_P,  // NOLINT(readability-identifier-naming)
+             const std::array<double, 7>& K_D)  // NOLINT(readability-identifier-naming)
+      : dq_current_filter_position_(0), dq_filter_size_(dq_filter_size), K_P_(K_P), K_D_(K_D) {
+    std::fill(dq_d_.begin(), dq_d_.end(), 0);
+    dq_buffer_ = std::make_unique<double[]>(dq_filter_size_ * 7);
+    std::fill(&dq_buffer_.get()[0], &dq_buffer_.get()[dq_filter_size_ * 7], 0);
+  }
+
+  inline franka::Torques step(const franka::RobotState& state, bool print) {
+    updateDQFilter(state);
+
+    std::array<double, 7> tau_J_d;  // NOLINT(readability-identifier-naming)
+    for (size_t i = 0; i < 7; i++) {
+      tau_J_d[i] = K_P_[i] * (state.q_d[i] - state.q[i]) + K_D_[i] * (dq_d_[i] - getDQFiltered(i));
+    }
+    if(print)
+    {
+        for(int i = 0; i < 7; i++)
+        {
+            std::cout << tau_J_d[i] << " ";
+        }
+            std::cout << std::endl;
+    }
+    return tau_J_d;
+  }
+
+  void updateDQFilter(const franka::RobotState& state) {
+    for (size_t i = 0; i < 7; i++) {
+      dq_buffer_.get()[dq_current_filter_position_ * 7 + i] = state.dq[i];
+    }
+    dq_current_filter_position_ = (dq_current_filter_position_ + 1) % dq_filter_size_;
+  }
+
+  double getDQFiltered(size_t index) const {
+    double value = 0;
+    for (size_t i = index; i < 7 * dq_filter_size_; i += 7) {
+      value += dq_buffer_.get()[i];
+    }
+    return value / dq_filter_size_;
+  }
+
+ private:
+  size_t dq_current_filter_position_;
+  size_t dq_filter_size_;
+
+  const std::array<double, 7> K_P_;  // NOLINT(readability-identifier-naming)
+  const std::array<double, 7> K_D_;  // NOLINT(readability-identifier-naming)
+
+  std::array<double, 7> dq_d_;
+  std::unique_ptr<double[]> dq_buffer_;
+};
 
 franka::RobotState CurrentRobotState;
 franka::GripperState CurrentGripperState;
@@ -190,6 +247,7 @@ franka::JointVelocities joint_vel_callback(const franka::RobotState& robot_state
     if (1 == STOP)
     {
         STOP--; // STOP equals 0
+        std::cout << "Motion Finsihed!" << std::endl;
         return franka::MotionFinished(output);
     }
     

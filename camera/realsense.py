@@ -18,8 +18,8 @@ pc = rs.pointcloud()
 class RealSense():
     intrinsic = np.array([[918.2952, 0, 638.9496], [0, 917.5439, 367.0617], [0, 0, 1]])
     distortion_coefficients = np.array([0.0, 0.0, 0.0, 0.0, 0.0]).astype(np.float32)
-    special_point_in_marker = np.array([-0.02, 0.135, 0.03]) # the coordinate of a  special point in the marker frame
-    robot_to_cabinet = np.array([-0.9, 0, 0]) # xyz_in_cabinet_frame = xyz_in_camera_frame + robot_to_cabinet
+    special_point_in_marker = np.array([+0.085, 0.23, 0.06]) # the coordinate of a special point in the marker frame
+    robot_to_cabinet = np.array([-0, 0, 0]) # xyz_in_cabinet_frame = xyz_in_camera_frame + robot_to_cabinet
     def __init__(self, c2w):
         self.pipeline = pipeline
         # Get device product line for setting a supporting resolution
@@ -28,7 +28,7 @@ class RealSense():
         # device = pipeline_profile.get_device()
         # device_product_line = str(device.get_info(rs.camera_info.product_line))
         self.pc = pc
-        # Configure depth and color streams    
+        # Configure depth and color streams
         self.hsv_low = np.array([18, 140, 42])
         self.hsv_high = np.array([85, 199, 92])
         self.name = 'real'
@@ -45,7 +45,7 @@ class RealSense():
             depth, color = self.get_frames()
         colorful = np.asanyarray(color.get_data())
         # self.handle_center = self.get_handle_center(colorful)
-        marker_R, marker_T, special_point = self.detech_marker(colorful)
+        marker_R, marker_T, special_point = self.detect_marker(colorful)
         if marker_R is not None and marker_T is not None and special_point is not None:
             self.marker_R, self.marker_T, self.special_point = marker_R, marker_T, special_point
             self.last_marker_R, self.last_marker_T, self.last_special_point = marker_R, marker_T, special_point
@@ -71,11 +71,6 @@ class RealSense():
         # xyz_world_frame[:, 0] = xyz_world_frame[:, 0] - 0.9
         return xyz_in_cabinet_frame
 
-    # def get_handle_center(self, frame):
-    #     marker_to_camera_R, marker_to_camera_t = pose_esitmation(frame)
-    #     special_point_to_camera = marker_to_camera_R @ self.special_point_in_marker[:, None] + marker_to_camera_t.T
-    #     return self.transfer2cabinet(special_point_to_camera.T)[0]
-
     def get_pointcloud(self, with_rgb=False, with_handle=True):
         """
         Output:
@@ -85,7 +80,7 @@ class RealSense():
         # time1 = time.time()
         depth, color = self.get_frames()
         colorful = np.asanyarray(color.get_data())
-        marker_R, marker_T, handle_center = self.detech_marker(colorful)
+        marker_R, marker_T, handle_center = self.detect_marker(colorful)
         if marker_R is None or marker_T is None or handle_center is None:
             marker_R, marker_T, handle_center = self.last_marker_R, self.last_marker_T, self.last_special_point
         else:
@@ -99,10 +94,10 @@ class RealSense():
         vtx = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1, 3)
         vtx = self.transfer2cabinet(vtx)
         mask1 = vtx[:, 2] > 1e-1
-        mask2 = vtx[:, 0] < 0.15
+        mask2 = vtx[:, 0] < 1
         mask3 = np.abs(vtx[:, 1]) < 0.4
         mask4 = vtx[:, 2] < 0.8
-        mask5 = vtx[:, 0] > -0.7
+        mask5 = vtx[:, 0] > 0
         mask = mask1 * mask2 * mask3 * mask4 * mask5  
 
         xyz = vtx[mask]
@@ -116,8 +111,7 @@ class RealSense():
             result += [handle_center, marker_R @ self.marker_R.T, marker_T - self.marker_T]
         return tuple(result)
         
-
-    def detech_marker(self, frame):
+    def detect_marker(self, frame):
         """
         Input: Frame from the video stream
 
@@ -126,10 +120,10 @@ class RealSense():
             - marker_T: origin of the marker's frame in the cabinet frame, numpy ndarray of shape (3,)
             - special_point: the coordinate of a special point in the cabinet frame, numpy ndarray of shape (3,)
         """
-        marker_in_camera_R, marker_in_camera_t = pose_esitmation(frame, self.intrinsic, self.distortion_coefficients)
+        marker_in_camera_R, marker_in_camera_t = pose_esitmation(frame, self.intrinsic, self.distortion_coefficients) # shape: (3, 3), (1, 3)
         if marker_in_camera_R is None or marker_in_camera_t is None:
             return None, None, None
-        special_point_to_camera = marker_in_camera_R @ self.special_point_in_marker[:, None] + marker_in_camera_t.T
+        special_point_to_camera = marker_in_camera_R @ self.special_point_in_marker[:, None] + marker_in_camera_t.T # shape: (3, 1)
         special_point = self.transfer2cabinet(special_point_to_camera.T)[0]
         marker_origin = self.transfer2cabinet(marker_in_camera_t)[0]
         return self.c2wR @ marker_in_camera_R, marker_origin, special_point
@@ -197,7 +191,6 @@ def pose_esitmation(frame, matrix_coefficients, distortion_coefficients):
         return None, None
 
 if __name__ == "__main__":
-    camera = RealSense(np.array([[-0.24518586365202366, 0.4669115339912172, 0.11584893612944897], [-0.23290171567181367, 0.5206099405741644, -0.7249414414425736, 0.386240840786749]]))
-    time.sleep(10)
+    camera = RealSense(np.array([[-0.17637916136681892, 0.5567354020174904, 0.2488602980557849], [-0.35240212895482415, 0.5218189084973818, -0.6723703853987748, 0.3891475698002122]]))
     xyz, handle, marker_R, marker_T = camera.get_pointcloud()
     print(marker_R)

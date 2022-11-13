@@ -8,32 +8,41 @@ bool RonMoving = false; // Whether a control or motion generator loop of robot i
 bool GonMoving = false; // Whether a control or motion generator loop of gripper is active
 double GripperTarget = 0;
 double GripperSpeed = 0.1;
-// {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}}
-std::array<double, 7> ResetGoal = {{-0.751971, -0.0259919, 0.388233, -2.04774, -0.487198, 3.66707, -0.386603}};
+std::array<double, 7> RobotResetGoal = {0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4};
+double GripperResetGoal = 0.02;
+
 
 extern "C"
 {
-    void new_robot(char fci_ip[], void **address);
+    void new_robot(char fci_ip[], void **address, double * reset_goal);
     
-    void new_gripper(char fci_ip[], void **address);
+    void new_gripper(char fci_ip[], void **address, double reset_goal);
 
     void stop_robot(long);
 
-    void start_cartesian_pos_control(franka::Robot *robot);
+    void stop_gripper(franka::Gripper *gripper);
 
-    void start_cartesian_vel_control(franka::Robot *robot);
+    void start_cartesian_pos_control(franka::Robot *robot, franka::Gripper *gripper);
 
-    void start_joint_pos_control(franka::Robot *robot);
+    void start_cartesian_vel_control(franka::Robot *robot, franka::Gripper *gripper);
 
-    void start_joint_vel_control(franka::Robot *robot);
+    void start_joint_pos_control(franka::Robot *robot, franka::Gripper *gripper);
 
-    void start_gripper(franka::Gripper *gripper);
+    void start_joint_vel_control(franka::Robot *robot, franka::Gripper *gripper);
 
-    void reset(franka::Robot *robot);
+    /**
+    * Moves the gripper fingers to a specified width.
+    *
+    * @param[in] width Intended opening width. [m]
+    * @param[in] speed Closing speed. [m/s]
+    **/
+    void start_gripper(franka::Gripper *gripper, double width, double speed);
+
+    void reset(franka::Robot *robot, franka::Gripper *gripper, double *robot_reset_goal, double gripper_reset_width);
 
     void homing(franka::Gripper *gripper);
 
-    void set_gripper_motion(double width, double speed);
+    // void set_gripper_motion(double width, double speed);
 
     void update_state(franka::Robot *robot, franka::Gripper *gripper);
     
