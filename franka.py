@@ -3,7 +3,7 @@ import numpy as np
 import time
 import sys
 sys.path.append(".")
-lib = ctypes.cdll.LoadLibrary('/home/hyperplane/ros-neotic-franka/test_pipeline/build/robotmodule/librobotmodule.so')
+lib = ctypes.cdll.LoadLibrary('./build/robotmodule/librobotmodule.so')
 lib.get_gwidth.restype = ctypes.c_double
 lib.get_RonMoving.restype = ctypes.c_bool
 lib.get_GonMoving.restype = ctypes.c_bool
@@ -215,9 +215,9 @@ class Robot:
 if __name__ == '__main__':
     r = Robot("172.16.0.2", np.array([-0.559383,0.0185739,0.0232256,-1.84237,-1.07274,3.22823,0.146157]), 0.03)
     # r.move_gripper(0.02, 0.01)
-    r.reset(np.array([-0.308, 0.054, -0.181, -2.055, -0.801, 3.72, -0.112]), gripper_reset_goal=0.04)
+    # r.reset(np.array([-0.308, 0.054, -0.181, -2.055, -0.801, 3.72, -0.112]), gripper_reset_goal=0.04)
     # r.start_joint_vel_control()
     # time.sleep(1)
-    # print(r.get_O_T_EE())
+    print(r.get_O_T_EE())
     # r.stop_gripper()
     print("Finished!")
