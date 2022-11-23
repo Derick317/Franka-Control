@@ -38,7 +38,7 @@ extern "C"
     **/
     void start_gripper(franka::Gripper *gripper, double width, double speed);
 
-    void reset(franka::Robot *robot, franka::Gripper *gripper, double *robot_reset_goal, double gripper_reset_width);
+    void reset(franka::Robot *robot, double *robot_reset_goal);
 
     void homing(franka::Gripper *gripper);
 

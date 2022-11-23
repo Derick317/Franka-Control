@@ -121,7 +121,7 @@ class Robot:
         if gripper_reset_goal is None:
             gripper_reset_goal = self.get_gwidth()
 
-        lib.reset(convert_type(self.obj), convert_type(self.gripper), _robot_reset_goal, convert_type(float(gripper_reset_goal)))
+        lib.reset(convert_type(self.obj), _robot_reset_goal)
 
     def homing(self):
         lib.homing(convert_type(self.gripper))
@@ -214,8 +214,9 @@ class Robot:
 
 if __name__ == '__main__':
     r = Robot("172.16.0.2", np.array([-0.559383,0.0185739,0.0232256,-1.84237,-1.07274,3.22823,0.146157]), 0.03)
-    # r.move_gripper(0.02, 0.01)
-    r.reset(np.array([-0.308, 0.054, -0.181, -2.055, -0.801, 3.72, -0.112]), gripper_reset_goal=0.04)
+    # r.reset(np.array([0.292225,-0.108397,-0.698742,-1.99106,-0.921009,3.64708,-0.00322475]))
+    r.move_gripper(0.008, 0.1)
+    r.reset(np.array([0.292225,-0.108397,-0.698742,-1.99106,-0.921009,3.64708,-0.00322475]))
     # r.start_joint_vel_control()
     # time.sleep(1)
     # print(r.get_O_T_EE())

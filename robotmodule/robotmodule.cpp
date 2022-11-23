@@ -33,7 +33,7 @@ struct joint_pos_control_data{
    std::function<franka::JointPositions(const franka::RobotState &, franka::Duration)> callback;
 };
 
-void handle_exception(franka::Robot *robot, franka::Gripper *gripper, const franka::Exception &e, double *robot_reset_goal)
+void handle_exception(franka::Robot *robot, const franka::Exception &e, double *robot_reset_goal, bool do_reset=true)
 {
     ExceptionOccur = 1;
     std::cout << e.what() << "\nTrying recovery..." << std::endl;
@@ -71,7 +71,8 @@ void handle_exception(franka::Robot *robot, franka::Gripper *gripper, const fran
         std::cout << "Finish recovery." << std::endl;
     }
     sleep(0.2);
-    reset(robot, gripper, robot_reset_goal, GripperResetGoal);
+    if(do_reset)
+        reset(robot, robot_reset_goal);
     CurrentRobotState = robot->readOnce();
     sleep(0.2);
     ExceptionOccur = 0;
@@ -106,11 +107,11 @@ void *run_cartesian_vel(void *args)
     }
     catch(const franka::ControlException& e)
     {
-        handle_exception(robot, data->gripper, e, RobotResetGoal.data());
+        handle_exception(robot, e, RobotResetGoal.data());
     }
     catch(const franka::NetworkException& e)
     {
-        handle_exception(robot, data->gripper, e, RobotResetGoal.data());
+        handle_exception(robot, e, RobotResetGoal.data());
     }
     RonMoving = false;
     std::cout << "Just after Cartesian velocity control" << std::endl;
@@ -138,11 +139,11 @@ void *run_cartesian_pos(void *args)
         }
         catch(const franka::ControlException& e)
         {
-            handle_exception(robot, data->gripper, e, RobotResetGoal.data());
+            handle_exception(robot, e, RobotResetGoal.data());
         }
         catch(const franka::NetworkException& e)
         {
-            handle_exception(robot, data->gripper, e, RobotResetGoal.data());
+            handle_exception(robot, e, RobotResetGoal.data());
         }
     RonMoving = false;
     
@@ -158,9 +159,9 @@ void *run_joint_vel(void *args)
         JointVelocity = {0};
         const size_t filter_size{5};
         // NOLINTNEXTLINE(readability-identifier-naming)
-        const std::array<double, 7> K_P{{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}}; // original value is 200.0
+        const std::array<double, 7> K_P{{50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0}}; // original value is 200.0
         // NOLINTNEXTLINE(readability-identifier-naming)
-        const std::array<double, 7> K_D{{10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0}}; // original value is 10.0
+        const std::array<double, 7> K_D{{5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0}}; // original value is 10.0
         Controller controller(filter_size, K_P, K_D);
         RonMoving = true;
         std::cout << "Just before joint velocity control. Now, STOP = " << STOP << std::endl;
@@ -170,11 +171,15 @@ void *run_joint_vel(void *args)
     }
     catch(const franka::ControlException& e)
     {
-        handle_exception(robot, data->gripper, e, RobotResetGoal.data());
+        handle_exception(robot, e, RobotResetGoal.data(), false);
     }
     catch(const franka::NetworkException& e)
     {
-        handle_exception(robot, data->gripper, e, RobotResetGoal.data());
+        handle_exception(robot, e, RobotResetGoal.data(), false);
+    }
+    catch(const franka::CommandException& e)
+    {
+        handle_exception(robot, e, RobotResetGoal.data(), false);
     }
     std::cout << "Just after joint velocity control" << std::endl;
     STOP = 0;
@@ -314,7 +319,7 @@ void start_gripper(franka::Gripper *gripper, double width, double speed)
     pthread_create(&tids[0], NULL, move_gripper, gripper);
 }
 
-void reset(franka::Robot *robot, franka::Gripper *gripper, double *robot_reset_goal, double gripper_reset_width)
+void reset(franka::Robot *robot, double *robot_reset_goal)
 {
     cout << "robot address in reset(): " << robot << endl;
     std::array<double, 7> q_goal = {0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4};
@@ -323,16 +328,6 @@ void reset(franka::Robot *robot, franka::Gripper *gripper, double *robot_reset_g
     RonMoving = true;
     try
     {   
-        // stop_gripper(gripper);
-        // while (GonMoving)
-        // {
-        //     cout << "Gripper is moving, waiting..." << endl;
-        //     sleep(0.001);
-        // }
-           
-        // cout << "Just before the 1st gripper moving" << endl;
-        // gripper->move(0.075, 0.2);
-        // cout << "Just after the 1st gripper moving" << endl;
         robot->control(motion_generator);
         if(robot_reset_goal)
         {
@@ -341,25 +336,16 @@ void reset(franka::Robot *robot, franka::Gripper *gripper, double *robot_reset_g
             MotionGenerator motion_generator2(0.5, ResetGoal);
             robot->control(motion_generator2);
         }
-        // cout << "Just before the 2nd stop gripper" << endl;
-        // stop_gripper(gripper);
-        // cout << "Just before the 2nd stop gripper" << endl;
-        // while (GonMoving)
-        //     sleep(0.001);
-        // cout << "Just before the 2nd gripper moving, target width = " << gripper_reset_width << endl;
-        // bool success_move = gripper->move(gripper_reset_width, 0.2);
-        // cout << "Just after the 2nd gripper moving. Successful? " << success_move << '!' << endl;
         CurrentRobotState = robot->readOnce();
-        CurrentGripperState = gripper->readOnce();
         cout << "Finish resetting the robot" << endl;
     }
     catch(const franka::ControlException& e)
     {
-        handle_exception(robot, gripper, e, robot_reset_goal);
+        handle_exception(robot, e, robot_reset_goal);
     }
     catch(const franka::NetworkException& e)
     {
-        handle_exception(robot, gripper, e, robot_reset_goal);
+        handle_exception(robot, e, robot_reset_goal);
     }
     RonMoving = false;
 }

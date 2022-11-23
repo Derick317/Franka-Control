@@ -1,0 +1,90 @@
+Robot address: 0x23caa60
+Just before gripper moving, target width = robot address in reset(): 0x23caa60
+0.02, speed = 0.01
+libfranka: Move command aborted: motion aborted by reflex! ["joint_reflex"]
+control_command_success_rate: 1
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 1
+Trying recovery...
+robot address in reset(): 0x23caa60
+Just after gripper moving
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 0.99
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 1
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 0.99
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 0.99
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 0.99
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 1
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 1
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 1
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 0.98
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 1
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 1
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 0.99
+Trying recovery...
+robot address in reset(): 0x23caa60
+libfranka: Move command aborted: motion aborted by reflex! ["cartesian_reflex"]
+control_command_success_rate: 1
+Trying recovery...
+Error recovery failed!libfranka: Automatic Error Recovery command rejected: manual error recovery required!
+If you want to exit, please type EXIT and press Enter.
+If you want to recover manually, please press the mode button and type MANUALLY and press Enter.
+Please confirm safety again and press Enter.
+After manual recovery, please type OK and press Enter.
+Finish recovery.
+robot address in reset(): 0x23caa60
+libfranka: Move command rejected: command not possible in the current mode!
+Trying recovery...
+Error recovery failed!libfranka: Automatic Error Recovery command rejected: command not possible in the current mode!
+If you want to exit, please type EXIT and press Enter.
+If you want to recover manually, please press the mode button and type MANUALLY and press Enter.
+Please confirm safety again and press Enter.
+After manual recovery, please type OK and press Enter.
+Finish recovery.
+robot address in reset(): 0x23caa60
+Finish resetting the robot
+Just before joint velocity control. Now, STOP = 0
+[ 0.0294097   0.99733071 -0.06668784  0.         -0.01340914  0.06710435
+  0.9976462   0.          0.99947749 -0.02844679  0.01534716  0.
+  0.6242212  -0.17690381  0.66725659  1.        ]
+Finished!
+Just before assign STOP! STOP = 0
+Just after assign STOP! (printed in C++)
+Motion Finsihed!
+Just after joint velocity control
+Stop funtion finished in Python

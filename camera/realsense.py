@@ -18,7 +18,7 @@ pc = rs.pointcloud()
 class RealSense():
     intrinsic = np.array([[918.2952, 0, 638.9496], [0, 917.5439, 367.0617], [0, 0, 1]])
     distortion_coefficients = np.array([0.0, 0.0, 0.0, 0.0, 0.0]).astype(np.float32)
-    special_point_in_marker = np.array([+0.085, 0.23, 0.06]) # the coordinate of a special point in the marker frame
+    special_point_in_marker = np.array([0, 0.185, 0.03]) # the coordinate of a special point in the marker frame
     robot_to_cabinet = np.array([-0, 0, 0]) # xyz_in_cabinet_frame = xyz_in_camera_frame + robot_to_cabinet
     def __init__(self, c2w):
         self.pipeline = pipeline
